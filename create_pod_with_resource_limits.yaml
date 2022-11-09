@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: po
+  name: po
+spec:
+  containers:
+  - args:
+    - nginx
+    image: nginx
+    name: po
+    resources:
+      limits:
+        cpu: 2
+        memory: 20Mi
+      requests:
+        cpu: 1
+        memory: 5Mi
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}

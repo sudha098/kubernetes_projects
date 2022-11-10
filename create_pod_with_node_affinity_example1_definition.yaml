@@ -1,7 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  creationTimestamp: null
   labels:
     app: blue
   name: blue
@@ -10,17 +9,14 @@ spec:
   selector:
     matchLabels:
       app: blue
-  strategy: {}
   template:
     metadata:
-      creationTimestamp: null
       labels:
         app: blue
     spec:
       containers:
       - image: nginx
         name: nginx
-        resources: {}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -30,4 +26,3 @@ spec:
                 operator: In
                 values:
                 - blue
-status: {}

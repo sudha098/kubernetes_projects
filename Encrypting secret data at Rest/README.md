@@ -67,6 +67,11 @@ kubectl get secrets --all-namespaces -o json | kubectl replace -f -
 
 ##########To disable encryption at rest, place the identity provider as the first entry in the config and restart all kube-apiserver processes.
 
+Secrets are not encrypted, so it is not safer in that sense. However, some best practices around using secrets make it safer. As in best practices like:
+
+a. Not checking-in secret object definition files to source code repositories.
+
+b. Enabling Encryption at Rest for Secrets so they are stored encrypted in ETCD.
 
 Please refer: https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/ for more understanding.
 

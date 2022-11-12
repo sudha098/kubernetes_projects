@@ -1,0 +1,56 @@
+UPGRADING CLUSTER FROM V1.24 TO V1.25
+------------------------------------
+
+
+ON MASTER NODE:
+---------------
+
+kubeadm upgrade plan
+
+kubeadm upgrade plan | grep remote
+
+kubectl drain  controlplane
+
+kubectl get pods -o wide
+
+kubectl get nodes
+
+apt-get install -y kubeadm=1.25.0-00
+
+kubeadm upgrade apply v1.25.0
+
+apt-get install kubelet=1.25.0-00
+
+systemctl restart kubelet.service
+
+kubectl get nodes
+
+kubectl uncordon controlplane
+
+kubectl get nodes
+
+
+ON WORKER NODE:
+---------------
+
+ssh node01
+
+kubectl drain node01
+
+apt-get install kubeadm=1.25.0-00 -y
+
+apt-get install kubelet=1.25.0-00 -y
+
+kubeadm upgrade node
+
+systemctl daemon-reload
+
+systemctl restart kubelet
+
+exit
+
+kubectl get nodes
+
+kubectl uncordon node01
+
+####REPEAT SAME PROCESS FOR OTHER WORKER NODES

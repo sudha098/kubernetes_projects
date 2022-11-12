@@ -1,0 +1,63 @@
+Working with multiple clusters:
+----------------------------------------
+
+kubectl config get-clusters
+NAME
+cluster1
+cluster2
+
+###switch the context to cluster1:
+
+kubectl config use-context cluster1
+k get nodes
+
+ssh cluster1-controlplane
+k get po --all-namespace -----> for stacked etcd
+
+
+ps -ef | grep etcd  -----> for external etcd
+
+Backup of etcd on another node :
+-------------------------------
+
+on clusters controlplane:
+-------------------------------
+etcdctl --endpoints=https://[127.0.0.1]:2379  --cacert=/etc/kubernetes/pki/etcd/ca.crt  --cert=/etc/kubernetes/pki/etcd/server.crt  --key=/etc/kubernetes/pki/etcd/server.key  snapshot save /opt/cluster1.db
+
+on node
+-----------------
+scp -r cluster1-controlplane:/opt/cluster1.db /opt/cluster1.db
+
+
+
+restore external etcd
+-------------------------
+
+Step 1. Copy the snapshot file from the student-node to the etcd-server. In the example below, we are copying it to the /root directory:
+scp /opt/cluster2.db etcd-server:/root/cluster2.db
+
+Step 2: Restore the snapshot on the cluster2. Since we are restoring directly on the etcd-server, we can use the endpoint https:/127.0.0.1. Use the same certificates that were identified earlier. Make sure to use the data-dir as /var/lib/etcd-data-new:
+
+ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/etcd/pki/ca.pem --cert=/etc/etcd/pki/etcd.pem --key=/etc/etcd/pki/etcd-key.pem snapshot restore /opt/cluster2.db --data-dir /var/lib/etcd-data-new
+
+
+Step 3: Update the systemd service unit file for etcd by running vim /etc/systemd/system/etcd.service and add the new value for data-dir:
+
+vim /etc/systemd/system/etcd.service
+
+Step 4: make sure the permissions on the new directory is correct (should be owned by etcd user):
+
+chown -R etcd:etcd /var/lib/etcd-data-new
+
+Step 5: Finally, reload and restart the etcd service.
+
+systemctl daemon-reload 
+systemctl restart etcd
+
+Step 6 (optional): It is recommended to restart controlplane components (e.g. kube-scheduler, kube-controller-manager, kubelet) to ensure that they don't rely on some stale data.
+
+
+
+
+
+

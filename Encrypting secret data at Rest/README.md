@@ -9,6 +9,7 @@ kubectl apply -f secret.yaml
 yum install etcd-client -y
 
 ##########determining whether encryption at rest is already enabled
+--------------------------------------------------------------------
 ETCDCTL_API=3 etcdctl \
    --cacert=/etc/kubernetes/pki/etcd/ca.crt   \
    --cert=/etc/kubernetes/pki/etcd/server.crt \
@@ -23,7 +24,7 @@ cat /etc/kubernetes/manifests/kube-apiserver.yaml
 
 
 ##########Encrypting your data
-
+--------------
 #Generate a 32-byte random key and base64 encode it.
 
 head -c 32 /dev/urandom | base64
@@ -63,7 +64,7 @@ crictl pods
 
 
 ##########Verifying that data is encrypted
------
+-----------------------------------------
 ps aux | grep kube-apiserver | grep "--encryption-provider-config"
 
 kubectl create secret generic my-secret-2 --from-literal=key2=topsecret --dry-run=client -o yaml > secret2.yaml
@@ -78,7 +79,7 @@ ETCDCTL_API=3 etcdctl \
 
 
 #Ensure all Secrets are encrypted
-
+---------------------------------
 kubectl get secrets --all-namespaces -o json | kubectl replace -f -
 
 
@@ -91,7 +92,7 @@ a. Not checking-in secret object definition files to source code repositories.
 b. Enabling Encryption at Rest for Secrets so they are stored encrypted in ETCD.
 
 Please refer: https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/ for more understanding.
-----------------------------------
+------------------------------------------------------------------------------------------------------
 
 
 

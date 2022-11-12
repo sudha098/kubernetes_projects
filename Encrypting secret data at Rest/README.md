@@ -75,7 +75,7 @@ ETCDCTL_API=3 etcdctl \
    --cacert=/etc/kubernetes/pki/etcd/ca.crt   \
    --cert=/etc/kubernetes/pki/etcd/server.crt \
    --key=/etc/kubernetes/pki/etcd/server.key  \
-   get /registry/secrets/default/my-secret | hexdump -C
+   get /registry/secrets/default/my-secret-2 | hexdump -C
 
 
 #Ensure all Secrets are encrypted
@@ -84,7 +84,7 @@ kubectl get secrets --all-namespaces -o json | kubectl replace -f -
 
 
 ##########To disable encryption at rest, place the identity provider as the first entry in the config and restart all kube-apiserver processes.
-
+-----------------------------------------------------------------------------------------------------------------------------------------------
 Secrets are not encrypted, so it is not safer in that sense. However, some best practices around using secrets make it safer. As in best practices like:
 
 a. Not checking-in secret object definition files to source code repositories.

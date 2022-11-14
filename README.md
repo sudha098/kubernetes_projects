@@ -1,6 +1,6 @@
 # kubernetes_projects
 ---------------------
-manifests files for kubernetes topics.
+Manifests files for kubernetes topics.
 
 
 Kubernetes documentation link:

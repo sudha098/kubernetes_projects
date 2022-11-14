@@ -2,9 +2,9 @@ apiVersion: v1
 kind: Pod
 metadata:
   labels:
-    run: po
-  name: po
+    run: app
+  name: app
 spec:
   containers:
-  - image: nginx
-    name: po
+  - name: nginx
+    image: nginx

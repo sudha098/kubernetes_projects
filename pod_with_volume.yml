@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: randam-number-generator
+spec:
+  containers:
+    - image: nginx
+      name: nginx
+      command: [ "/bin/sh", "-c" ]
+      args: [ "shuf -i 0-100 -n 1 >> /opt/number.out;" ]
+      volumeMounts:
+        - name: data-volume
+          mountPath: /opt
+  volumes:
+    - name: data-volume
+      hostPath:
+        path: /data
+        type: directory

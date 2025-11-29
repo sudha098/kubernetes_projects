@@ -1,4 +1,3 @@
-
 # Kubernetes Cluster Installation (3 Nodes, RHEL, kubeadm)
 
 ### Version: **Kubernetes v1.29.x**

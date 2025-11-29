@@ -1,0 +1,278 @@
+
+# Kubernetes Cluster Installation (3 Nodes, RHEL, kubeadm)
+
+### Version: **Kubernetes v1.29.x**
+
+### Nodes: **1 Control Plane + 2 Workers**
+
+### Runtime: **containerd**
+
+### OS: **RHEL 8 / RHEL 9 / Rocky / AlmaLinux**
+
+---
+
+# 📘 Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Disable Swap](#disable-swap)
+3. [Install Container Runtime (containerd)](#install-container-runtime-containerd)
+4. [Configure Kernel Modules & Sysctl](#configure-kernel-modules--sysctl)
+5. [Install kubeadm/kubelet/kubectl](#install-kubeadm-kubelet-kubectl)
+6. [Initialize Control Plane](#initialize-control-plane)
+7. [Install CNI (Calico)](#install-cni-calico)
+8. [Join Worker Nodes](#join-worker-nodes)
+9. [Verify Cluster](#verify-cluster)
+10. [Enable Autostart & Common Fixes](#enable-autostart--common-fixes)
+
+---
+
+# 1️⃣ Prerequisites
+
+All nodes must have:
+
+| Node   | Role          | Example Hostname |
+| ------ | ------------- | ---------------- |
+| Node 1 | Control Plane | `cp-1`           |
+| Node 2 | Worker        | `worker-1`       |
+| Node 3 | Worker        | `worker-2`       |
+
+**Requirements**
+
+* 2+ CPUs per node
+* 2–4 GB RAM
+* Internet access
+* SELinux in **permissive** mode
+* Firewall open or disabled
+* Unique hostname per node
+
+---
+
+# 2️⃣ Disable Swap (Required)
+
+Run on **all nodes**:
+
+```bash
+swapoff -a
+sed -i '/swap/d' /etc/fstab
+```
+
+Check:
+
+```bash
+free -h
+```
+
+---
+
+# 3️⃣ Install Container Runtime (containerd)
+
+### Install dependencies
+
+```bash
+yum install -y yum-utils device-mapper-persistent-data lvm2
+```
+
+### Add Docker repo (provides containerd)
+
+```bash
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+```
+
+### Install containerd
+
+```bash
+yum install -y containerd.io
+```
+
+### Configure containerd
+
+```bash
+mkdir -p /etc/containerd
+containerd config default > /etc/containerd/config.toml
+```
+
+### Enable systemd cgroup driver
+
+Edit:
+
+```bash
+vim /etc/containerd/config.toml
+```
+
+Find:
+
+```
+SystemdCgroup = false
+```
+
+Change to:
+
+```
+SystemdCgroup = true
+```
+
+Restart containerd:
+
+```bash
+systemctl daemon-reload
+systemctl enable --now containerd
+```
+
+---
+
+# 4️⃣ Configure Kernel Modules & Sysctl
+
+### Load required modules
+
+```bash
+cat <<EOF | tee /etc/modules-load.d/k8s.conf
+overlay
+br_netfilter
+EOF
+
+modprobe overlay
+modprobe br_netfilter
+```
+
+### Configure sysctl
+
+```bash
+cat <<EOF | tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward = 1
+EOF
+
+sysctl --system
+```
+
+---
+
+# 5️⃣ Install kubeadm, kubelet, kubectl
+
+### Add Kubernetes repository
+
+```bash
+cat <<EOF | tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes Repo
+baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+enabled=1
+gpgcheck=1
+gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repomd.xml.key
+exclude=kubelet kubeadm kubectl kubernetes-cni cri-tools
+EOF
+```
+
+### Install Kubernetes packages with `--disableexcludes`
+
+```bash
+yum install -y kubeadm kubelet kubectl --disableexcludes=kubernetes
+```
+
+Enable kubelet:
+
+```bash
+systemctl enable --now kubelet
+```
+
+*(kubelet will show errors until the cluster is initialized — this is normal)*
+
+---
+
+# 6️⃣ Initialize Control Plane
+
+Run on **control plane node only**:
+
+```bash
+kubeadm init \
+  --apiserver-advertise-address=<CONTROL_PLANE_IP> \
+  --pod-network-cidr=192.168.0.0/16
+```
+
+Set up kubectl for your user:
+
+```bash
+mkdir -p $HOME/.kube
+cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+chown $(id -u):$(id -g) $HOME/.kube/config
+```
+
+---
+
+# 7️⃣ Install CNI (Calico)
+
+```bash
+kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+```
+
+Check Calico pods:
+
+```bash
+kubectl get pods -n kube-system
+```
+
+---
+
+# 8️⃣ Join Worker Nodes
+
+On each worker node, run the join command printed during `kubeadm init`, e.g.:
+
+```bash
+kubeadm join <CONTROL_PLANE_IP>:6443 \
+  --token <TOKEN> \
+  --discovery-token-ca-cert-hash sha256:<HASH>
+```
+
+If you lost it:
+
+```bash
+kubeadm token create --print-join-command
+```
+
+Run it on all worker nodes.
+
+---
+
+# 9️⃣ Verify Cluster
+
+On the control plane node:
+
+```bash
+kubectl get nodes
+```
+
+Expected result:
+
+```
+NAME        STATUS   ROLES           VERSION
+cp-1        Ready    control-plane   v1.29.x
+worker-1    Ready    <none>          v1.29.x
+worker-2    Ready    <none>          v1.29.x
+```
+
+Check cluster components:
+
+```bash
+kubectl get pods -A
+```
+
+---
+
+# 🔟 Enable Autostart & Common Fixes
+
+### Enable containerd & kubelet
+
+```bash
+systemctl enable containerd
+systemctl enable kubelet
+```
+
+### Useful debugging commands
+
+```bash
+journalctl -u kubelet -f
+crictl ps -a
+systemctl status kubelet
+```
+

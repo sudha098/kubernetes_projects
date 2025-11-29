@@ -1,104 +1,235 @@
 
-PROCESS OF ENCRYPTING DATA AT REST.
-------------------------------------
+---
 
-kubectl create secret generic my-secret --from-literal=key1=supersecret --dry-run=client -o yaml > secret.yaml
+# 🔐 **Kubernetes – Enabling Encryption at Rest (Full Process)**
+
+Encryption at Rest secures Kubernetes Secrets stored in etcd.
+This guide shows:
+
+1. Check if encryption is enabled
+2. Enable encryption
+3. Verify encrypted data
+4. Re-encrypt all existing secrets
+5. Disable or revert encryption
+
+---
+
+# 1️⃣ **Create a Test Secret (Unencrypted)**
+
+```bash
+kubectl create secret generic my-secret \
+  --from-literal=key1=supersecret \
+  --dry-run=client -o yaml > secret.yaml
 
 kubectl apply -f secret.yaml
+```
 
-yum install etcd-client -y
+---
 
-##########determining whether encryption at rest is already enabled
---------------------------------------------------------------------
+# 2️⃣ **Install etcdctl (if missing)**
+
+For RHEL/CentOS:
+
+```bash
+yum install -y etcd-client
+```
+
+---
+
+# 3️⃣ **Check if Encryption at Rest is Already Enabled**
+
+### **A. Check etcd directly (secret should appear as plaintext if NOT encrypted)**
+
+```bash
 ETCDCTL_API=3 etcdctl \
-   --cacert=/etc/kubernetes/pki/etcd/ca.crt   \
-   --cert=/etc/kubernetes/pki/etcd/server.crt \
-   --key=/etc/kubernetes/pki/etcd/server.key  \
-   get /registry/secrets/default/my-secret | hexdump -C
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  get /registry/secrets/default/my-secret | hexdump -C
+```
 
-ps aux | grep kube-apiserver | grep "--encryption-provider-config"
+If secret value appears in **plaintext**, encryption is **NOT** enabled.
 
-ls /etc/kubernetes/manifests/
+---
 
+### **B. Check kube-apiserver arguments**
+
+```bash
+ps aux | grep kube-apiserver | grep -- --encryption-provider-config
+```
+
+### **C. Inspect static pod manifest**
+
+```bash
 cat /etc/kubernetes/manifests/kube-apiserver.yaml
+```
 
+No encryption config = **not encrypted**.
 
-##########Encrypting your data
---------------
-#Generate a 32-byte random key and base64 encode it.
+---
 
+# 4️⃣ **Enable Encryption at Rest**
+
+### **A. Generate a 32-byte encryption key**
+
+```bash
 head -c 32 /dev/urandom | base64
+```
 
+Use this value in your `encryption-config.yaml` (example file):
+
+**enc.yaml:**
+
+```yaml
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+      - secrets
+    providers:
+      - aescbc:
+          keys:
+            - name: key1
+              secret: <BASE64_KEY_HERE>
+      - identity: {}
+```
+
+Apply encryption config locally:
+
+```bash
 kubectl apply -f enc.yaml
+```
 
-mkdir /etc/kubernetes/enc
+---
 
-mv encryption-config.yaml /etc/kubernetes/enc
+### **B. Move encryption config to correct directory**
 
+```bash
+mkdir -p /etc/kubernetes/enc
+mv encryption-config.yaml /etc/kubernetes/enc/enc.yaml
 ls /etc/kubernetes/enc
+```
 
+---
+
+### **C. Modify the kube-apiserver manifest**
+
+Edit:
+
+```bash
 vim /etc/kubernetes/manifests/kube-apiserver.yaml
+```
 
-#spec:
-   containers:
-   - command:
-     - kube-apiserver
-     ...
-     - --encryption-provider-config=/etc/kubernetes/enc/enc.yaml  # <-- add this line
-     volumeMounts:
-     ...
-     - name: enc                           # <-- add this line
-       mountPath: /etc/kubernetes/enc      # <-- add this line
-       readonly: true                      # <-- add this line
-     ...
-   volumes:
-   ...
-   - name: enc                             # <-- add this line
-     hostPath:                             # <-- add this line
-       path: /etc/kubernetes/enc           # <-- add this line
-       type: DirectoryOrCreate             # <-- add this line
+Add to **command section**:
 
-kubectl get pods
+```
+- --encryption-provider-config=/etc/kubernetes/enc/enc.yaml
+```
 
+Add to **volumeMounts**:
+
+```yaml
+- name: enc
+  mountPath: /etc/kubernetes/enc
+  readOnly: true
+```
+
+Add to **volumes**:
+
+```yaml
+- name: enc
+  hostPath:
+    path: /etc/kubernetes/enc
+    type: DirectoryOrCreate
+```
+
+### **APIServer will auto-restart**
+
+(Static pod watched by kubelet.)
+
+Check:
+
+```bash
+kubectl get pods -n kube-system
 crictl pods
+```
 
+---
 
-##########Verifying that data is encrypted
------------------------------------------
-ps aux | grep kube-apiserver | grep "--encryption-provider-config"
+# 5️⃣ **Verify Encryption is Working**
 
-kubectl create secret generic my-secret-2 --from-literal=key2=topsecret --dry-run=client -o yaml > secret2.yaml
+### **A. Confirm APIServer is using encryption**
 
-kubectl get pods
+```bash
+ps aux | grep kube-apiserver | grep -- --encryption-provider-config
+```
 
+### **B. Create a NEW secret (should be encrypted)**
+
+```bash
+kubectl create secret generic my-secret-2 \
+  --from-literal=key2=topsecret \
+  --dry-run=client -o yaml > secret2.yaml
+
+kubectl apply -f secret2.yaml
+```
+
+### **C. Read the secret from etcd**
+
+```bash
 ETCDCTL_API=3 etcdctl \
-   --cacert=/etc/kubernetes/pki/etcd/ca.crt   \
-   --cert=/etc/kubernetes/pki/etcd/server.crt \
-   --key=/etc/kubernetes/pki/etcd/server.key  \
-   get /registry/secrets/default/my-secret-2 | hexdump -C
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  get /registry/secrets/default/my-secret-2 | hexdump -C
+```
 
+If the value is unreadable (garbled bytes), encryption is **working**.
 
-#Ensure all Secrets are encrypted
----------------------------------
+---
+
+# 6️⃣ **Encrypt ALL Existing Secrets**
+
+Older secrets (created before encryption) remain unencrypted until rewritten.
+
+Force rewrite:
+
+```bash
 kubectl get secrets --all-namespaces -o json | kubectl replace -f -
+```
 
+---
 
-##########To disable encryption at rest, place the identity provider as the first entry in the config and restart all kube-apiserver processes.
------------------------------------------------------------------------------------------------------------------------------------------------
-Secrets are not encrypted, so it is not safer in that sense. However, some best practices around using secrets make it safer. As in best practices like:
+# 7️⃣ **Disable Encryption at Rest (Revert)**
 
-a. Not checking-in secret object definition files to source code repositories.
+Modify your encryption config so that:
 
-b. Enabling Encryption at Rest for Secrets so they are stored encrypted in ETCD.
+`identity` is **first** provider:
 
-Please refer: https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/ for more understanding.
-------------------------------------------------------------------------------------------------------
+```yaml
+providers:
+  - identity: {}
+  - aescbc:
+      keys:
+      - name: key1
+        secret: <BASE64_KEY>
+```
 
+Restart kube-apiserver (auto restart as static pod or manually if needed).
 
+Now secrets will be stored in plaintext again.
 
+---
 
+# 📌 Best Practices for Kubernetes Secrets
 
+Even without encryption:
 
+1. **Never commit secret manifests to Git**
+2. **Enable Encryption at Rest** (which we just implemented)
+3. Use **RBAC** to restrict access
+4. Use **external secret stores** (Vault / AWS KMS / GCP KMS / Azure Key Vault)
+5. Use **sealed-secrets** or **SOPS** when storing secrets in git
 
-
+---
 

@@ -1,0 +1,12 @@
+# monitoring/jaeger-deployment.yaml
+apiVersion: jaegertracing.io/v1
+kind: Jaeger
+metadata:
+  name: jaeger
+  namespace: monitoring
+spec:
+  strategy: allInOne
+  options:
+    jaeger.query.base-path: /
+  storage:
+    type: memory
